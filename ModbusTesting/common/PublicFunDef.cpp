@@ -2,7 +2,8 @@
 //
 //////////////////////////////////////////////////////////////////////
 
-#include "stdafx.h"
+//#include "stdafx.h"
+#include <afx.h>
 #include "PublicFunDef.h"
 
 #ifdef _DEBUG
@@ -316,7 +317,7 @@ BOOL ConnectRemotePC(const char* IP, const char* path, const char* user, const c
 	if (!ConnectIPC(IP,path,user,pass))
 	{
 		//AfxMessageBox("创建远程日志出错");
-		AfxMessageBox("Create remote logs error!");
+		//AfxMessageBox("Create remote logs error!");
 		return FALSE;
 	}
 	return TRUE;

@@ -157,8 +157,9 @@ BOOL CModbusTestingDlg::OnInitDialog()
 	//初始化头 0001000002C904100001016100
 	uint8_t uint8Temp[13] = { 0 };
 	Ascii2Hex(uint8Temp, (uint8_t*)CTRL_HEAD_CODE, 26);
-	//ctrlCoding.headCode = uint8Temp;
 	memcpy(ctrlCoding.headCode, uint8Temp, 13);
+
+	isPol = false;
 	return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
 }
 
@@ -211,8 +212,19 @@ HCURSOR CModbusTestingDlg::OnQueryDragIcon()
 	return static_cast<HCURSOR>(m_hIcon);
 }
 
-
-
+//广播操作员（c）初始化
+std::string strOperate[20] = {
+	"中心值班主任(总调)", "中心环调", "中心行调1", "中心行调2",
+	"中心行调3", "预留", "预留", "预留",
+	"预留", "预留", "预留", "车站火灾",
+	"预留", "段场检修调度", "车站值班", "列车到站自动广播",
+	"预留", "预留", "预留", "预留"
+};
+//消息源编号（d）初始化
+std::string chStrMsgSource[10] = {
+	"人工广播(实时广播)", "日常预存广播", "外接广播(背景音乐)", "停止人工广播(实时广播)", "停止日常预存广播",
+	"停止外接广播(背景音乐)", "开始监听广播", "停止监听广播", "开始文本广播", "停止文本广播"
+};
 
 void CModbusTestingDlg::initializationUI()
 {
@@ -241,14 +253,7 @@ void CModbusTestingDlg::initializationUI()
 	m_spin_as.SetBase(10);//设置进制数,只能是10进制和16进制
 
 
-	//广播操作员（c）初始化
-	std::string strOperate[20] = {
-		"中心值班主任(总调)", "中心环调", "中心行调1", "中心行调2",
-		"中心行调3", "预留", "预留", "预留",
-		"预留", "预留", "预留", "车站火灾",
-		"预留", "段场检修调度", "车站值班", "列车到站自动广播",
-		"预留", "预留", "预留", "预留"
-	};
+
 	for (size_t i = 1; i < 21;i++)
 	{
 		CString comboxList_operater = "";
@@ -257,11 +262,7 @@ void CModbusTestingDlg::initializationUI()
 	}
 	m_combox_operater.SetCurSel(0);
 
-	//消息源编号（d）初始化
-	std::string chStrMsgSource[10] = {
-		"人工广播(实时广播)", "日常预存广播", "外接广播(背景音乐)", "停止人工广播(实时广播)", "停止日常预存广播",
-		"停止外接广播(背景音乐)", "开始监听广播", "停止监听广播", "开始文本广播", "停止文本广播"
-	};
+
 	for (size_t i = 1; i < 11; i++)
 	{
 		CString comboxList_msgSource = "";
@@ -312,8 +313,8 @@ int CModbusTestingDlg::initStationInfo()
 
 
 	m_listControl_stationList.InsertColumn(0, "分区", LVCFMT_CENTER, 60, 0);
-	m_listControl_stationList.InsertColumn(1, "所属分区号", LVCFMT_CENTER, 150, 1);
-	m_listControl_stationList.InsertColumn(2, "站点", LVCFMT_CENTER, 170, 2);
+	m_listControl_stationList.InsertColumn(1, "所属分区号", LVCFMT_CENTER, 78, 1);
+	m_listControl_stationList.InsertColumn(2, "站点", LVCFMT_CENTER, 240, 2);
 
 
 	OnCbnSelchangeComboStation();
@@ -438,7 +439,7 @@ void CModbusTestingDlg::traversalToSave()
 
 void CModbusTestingDlg::comboxSelectionHandle(CString station)
 {
-
+	CString partStr;
 	vector<std::string> selectValueTemp;
 	selectValueTemp = vSplitString(station.GetBuffer(), ".");
 	station.ReleaseBuffer();
@@ -449,6 +450,7 @@ void CModbusTestingDlg::comboxSelectionHandle(CString station)
 		m_listControl_stationList.DeleteAllItems();
 		int rNum = iter->second.low;
 		int partNum = 0;
+		int partTempNum = 0;
 		for (size_t i = 0; i < iter->second.vecStationCheckList.size(); i++)
 		{
 
@@ -460,9 +462,11 @@ void CModbusTestingDlg::comboxSelectionHandle(CString station)
 			{
 				partNum = iter->second.partitionNum2;
 			}
+			
+			partStr.Format("%s - P%d", transcoding2utf8((char*)iter->second.name.c_str()).c_str(),++partTempNum);
 			m_listControl_stationList.InsertItem(i, std::to_string(rNum).c_str());
 			m_listControl_stationList.SetItemText(i, 1, std::to_string(partNum).c_str());
-			m_listControl_stationList.SetItemText(i, 2, transcoding2utf8((char*)iter->second.name.c_str()).c_str());
+			m_listControl_stationList.SetItemText(i, 2, partStr);
 			m_listControl_stationList.SetCheck(i, iter->second.vecStationCheckList.at(i));
 
 			rNum++;
@@ -564,8 +568,10 @@ void CModbusTestingDlg::OnBnClickedButtonPollingCmd()
 	if (socket_fd == 0)
 	{
 		AfxMessageBox("未进行连接");
+		isPol = false;
 		return;
 	}
+	isPol = true;
 	std::mutex x;
 	x.lock();
 	uint8_t recvMsgHex[LENGTH_A] = { 0 };
@@ -596,9 +602,15 @@ void CModbusTestingDlg::printLogFunc(logType type, std::string message, int nLen
 		outMessage.Format("[%s] RECV Length:%d\r\n%s\r\n", GetGmtTime(), nLen, message.c_str());
 		((CEdit*)GetDlgItem(IDC_EDIT_LOG))->SetSel(GetDlgItem(IDC_EDIT_LOG)->GetWindowTextLength(), GetDlgItem(IDC_EDIT_LOG)->GetWindowTextLength());
 		((CEdit*)GetDlgItem(IDC_EDIT_LOG))->ReplaceSel(outMessage);
+
 		break;
 	case cntStatus:
 		outMessage.Format("[%s] %s\r\n", GetGmtTime(),message.c_str());
+		((CEdit*)GetDlgItem(IDC_EDIT_LOG))->SetSel(GetDlgItem(IDC_EDIT_LOG)->GetWindowTextLength(), GetDlgItem(IDC_EDIT_LOG)->GetWindowTextLength());
+		((CEdit*)GetDlgItem(IDC_EDIT_LOG))->ReplaceSel(outMessage);
+		break;
+	case polling:
+		outMessage.Format("%s", message.c_str());
 		((CEdit*)GetDlgItem(IDC_EDIT_LOG))->SetSel(GetDlgItem(IDC_EDIT_LOG)->GetWindowTextLength(), GetDlgItem(IDC_EDIT_LOG)->GetWindowTextLength());
 		((CEdit*)GetDlgItem(IDC_EDIT_LOG))->ReplaceSel(outMessage);
 		break;
@@ -645,6 +657,10 @@ void CModbusTestingDlg::socketSendAndRecv(SOCKET &s, uint8_t *sendMsg, int sendL
 	Sleep(50);
 	recvLen = recv(s, (char*)recvMsg, LENGTH_A, 0); //接收
 	int i = 0;
+	char recvTemp[LENGTH_A] = { 0 };
+	memcpy(recvTemp, recvMsg, recvLen);
+	char a = recvTemp[8];
+	char b = recvTemp[7];
 	switch (recvingType)
 	{
 	case 0: //ASCII 显示
@@ -654,6 +670,11 @@ void CModbusTestingDlg::socketSendAndRecv(SOCKET &s, uint8_t *sendMsg, int sendL
 		break;
 	case 1: //HEX 显示
 		printLogFunc(receiving, uint8Str2HexStr(recvMsg, recvLen), recvLen);
+		if (isPol && b == 0x04) {
+			isPol = false;
+			printLogFunc(polling,pollingMsgParsing(recvMsg),0);
+		}
+
 		break;
 	default:
 		break;
@@ -848,8 +869,8 @@ void CModbusTestingDlg::OnBnClickedButtonControlCmd()
 		return;
 	}
 	/*获取车站编号*/
-	int nIndex = 8, nIndex2 = 0;
-	uint8_t uint8StationList[160];
+	int nIndex = 7, nIndex2 = -1;
+	uint8_t uint8StationList[400];
 	uint8_t uchStation[8] = { 0 };
 	memset(uint8StationList, 0x00, sizeof(uint8StationList));
 	for (iter = g_CINI.mapStationList.begin(); iter != g_CINI.mapStationList.end(); iter++) {
@@ -864,10 +885,10 @@ void CModbusTestingDlg::OnBnClickedButtonControlCmd()
 			uchStation[nIndex] = (bitTemp1 << 3) | (bitTemp2 << 2) | (bitTemp3 << 1) | (bitTemp4);
 			nIndex--;
 		}
-		uint8StationList[++nIndex2] = ((uchStation[4] << 4) & 0xff) | (uchStation[3] & 0x0f);
-		uint8StationList[++nIndex2] = ((uchStation[2] << 4) & 0xff) | (uchStation[1] & 0x0f);
-		uint8StationList[++nIndex2] = ((uchStation[8] << 4) & 0xff) | (uchStation[7] & 0x0f);
-		uint8StationList[++nIndex2] = ((uchStation[6] << 4) & 0xff) | (uchStation[5] & 0x0f);
+		uint8StationList[++nIndex2] = ((uchStation[3] << 4) & 0xff) | (uchStation[2] & 0x0f);
+		uint8StationList[++nIndex2] = ((uchStation[1] << 4) & 0xff) | (uchStation[0] & 0x0f);
+		uint8StationList[++nIndex2] = ((uchStation[7] << 4) & 0xff) | (uchStation[6] & 0x0f);
+		uint8StationList[++nIndex2] = ((uchStation[5] << 4) & 0xff) | (uchStation[4] & 0x0f);
 		memset(uchStation, 0x00, sizeof(uchStation));
 	}
 	memcpy(ctrlCoding.areaCode, uint8StationList, areaCodeLen);
@@ -891,27 +912,35 @@ void CModbusTestingDlg::OnBnClickedButtonControlCmd()
 	CString ttsStr;
 	m_edit_tts.GetWindowTextA(ttsStr);
 	std::wstring utfCode = L"";
+	uint8_t uint8Tts[500];
+	memset(uint8Tts, 0x00, sizeof(uint8Tts));
+	int iIndex = 0;
 	switch (IncludeChinese(ttsStr.GetBuffer()))
 	{
 	case 0: //不含有中文
 		utfCode = Utf8ToUnicode(ttsStr);  //英文 UTF8编码（"well" -> 77656C6C）
+		for each (auto utfTemp in utfCode)
+		{
+			//uint8Tts[iIndex] = (utfTemp >> 8) & 0x00ff;
+			uint8Tts[iIndex] = utfTemp & 0x00ff;
+			iIndex++;
+		}
 		break;
 	case 1: //含有中文
-		utfCode = AnsiToUnicode(ttsStr);  //中文 UTF16BE编码（"欢迎" -> FEFF6B228FCE）
+		utfCode = AnsiToUnicode(ttsStr);  //中文 UTF16BE编码（"欢迎" -> FEFF6B228FCE)
+		for each (auto utfTemp in utfCode)
+		{
+			uint8Tts[iIndex] = (utfTemp >> 8) & 0x00ff;
+			uint8Tts[++iIndex] = utfTemp & 0x00ff;
+			iIndex++;
+		}
 		break;
 	default:
 		break;
 	}
 	ttsStr.ReleaseBuffer();
-	uint8_t uint8Tts[500];
-	memset(uint8Tts, 0x00, sizeof(uint8Tts));
-	int iIndex = 0;
-	for each (auto utfTemp in utfCode)
-	{
-		uint8Tts[iIndex] = (utfTemp >> 8) & 0x00ff;
-		uint8Tts[++iIndex] = utfTemp & 0x00ff;
-		iIndex++;
-	}
+
+
 	memcpy(ctrlCoding.textCode, uint8Tts, textCodeLen);
 
 	/*获取语言选择*/
@@ -1025,6 +1054,11 @@ void CModbusTestingDlg::OnBnClickedButtonControlCmd()
 	}
 	memset(uint8CtrlSendCode, 0x00, sizeof(uint8CtrlSendCode));
 	memset(recvMsgHex, 0x00, LENGTH_A);
+
+	ctrlCoding.initControlCodeing();
+	uint8_t uint8Temp[13] = { 0 };
+	Ascii2Hex(uint8Temp, (uint8_t*)CTRL_HEAD_CODE, 26);
+	memcpy(ctrlCoding.headCode, uint8Temp, 13);
 }
 
 
@@ -1050,7 +1084,8 @@ void CModbusTestingDlg::OnBnClickedButtonSend()
 	uint8_t uint8Recv[LENGTH_A] = { 0 };
 	int recvLen = 0;
 	int sendLen = sendText.GetLength();
-	socketSendAndRecv(socket_fd, (uint8_t*)sendText.Trim().GetBuffer(sendText.GetLength()), sendText.GetLength(), uint8Recv, recvLen);
+	socketSendAndRecv(socket_fd, (uint8_t*)sendText.Trim().GetBuffer(sendLen), sendText.GetLength(), uint8Recv, recvLen);
+	sendText.ReleaseBuffer(sendLen);
 	
 }
 
@@ -1078,4 +1113,90 @@ void CModbusTestingDlg::OnBnClickedButtonClean()
 {
 	// TODO:  在此添加控件通知处理程序代码
 	m_edit_log.SetWindowTextA("");
+}
+
+//操作台钥匙开启状态
+string operationKeyArray[2] = { "关闭","开启" };
+//音频话筒状态
+string microphoneStatusArray[3] = { "正常","故障","占用" };
+//广播系统故障状态
+string paFaultStatusArray[2] = { "正常","故障" };
+//广播区占用状态
+string partitionOccupancyArray[2] = { "空闲","占用" };
+//播音状态
+std::string strBroadcastStatus[7] = {
+"无广播", "人工广播", "日常预存广播", "外接广播",
+"TTS广播", "待定", "待定"
+};
+//广播操作员（c）初始化
+std::string pollOperate[21] = {
+	"无","中心值班主任(总调)", "中心环调", "中心行调1", "中心行调2",
+	"中心行调3", "预留", "预留", "预留",
+	"预留", "预留", "预留", "车站火灾",
+	"预留", "段场检修调度", "车站值班", "列车到站自动广播",
+	"预留", "预留", "预留", "预留"
+};
+std::string CModbusTestingDlg::pollingMsgParsing(uint8_t* polMsg)
+{
+	//char* strHeadMsg = { 0 };
+	CString phoneticTypes;
+	string strmega;
+	CString strTempMsg;
+	int n1 = 0, n2, n3, n4;
+	int operationKey = 0;		//操作台钥匙开启状态
+	int microphoneStatus = 0;	//音频话筒状态
+	int paFaultStatus = 0;		//广播系统故障状态
+
+	n1 = polMsg[10];
+	operationKey = (n1 & 0x01);
+	microphoneStatus = (n1 >> 1) & 0x03;
+	paFaultStatus = (n1 >> 3) & 0x01;
+	strTempMsg.Format("操作台:%s , 音频话筒:%s , PA系统:%s", operationKeyArray[operationKey].c_str(), microphoneStatusArray[microphoneStatus].c_str(), paFaultStatusArray[paFaultStatus].c_str());
+	strmega.append(strTempMsg.GetBuffer());
+	strmega.append("\r\n");
+	strTempMsg.ReleaseBuffer();
+	int j = 11;
+	for (int i = 0; i < 32; i++)
+	{
+		int broadCastStatus;//播音状态
+		int isOccupy;//是否占用
+		phoneticTypes = "";
+		n1 = polMsg[j];   //01
+		n2 = polMsg[++j]; //07
+		n3 = polMsg[++j]; //04
+		n4 = polMsg[++j]; //02
+		j++;
+		wchar_t wcharisOccupy = '\0';
+		wcharisOccupy = ((n3 << 8) | (n4));
+		broadCastStatus = (n2 >> 1) & 0x07;
+		isOccupy = n2 & 0x01;
+		
+		strTempMsg.Format("\r\n[P%02d] -播音状态：%s , 优先级：%s , 广播区状态：%s", i + 1, (char*)strBroadcastStatus[broadCastStatus].c_str(), (char*)pollOperate[n1].c_str(), partitionOccupancyArray[isOccupy].c_str());
+		if (broadCastStatus != 0)
+		{
+			int seg = wcharisOccupy;
+
+			if (seg == 1025)
+			{
+				phoneticTypes = "          广播语音段: 文本语音";
+			}
+			else if (seg == 1026)
+			{
+				phoneticTypes = "          广播语音段: 其他语音";
+			}
+			else {
+				phoneticTypes.Format("          广播语音段: 预录制语音 (ID: %d)", seg);
+			}
+			strmega.append(strTempMsg);
+			strmega.append("\r\n");
+			strmega.append(phoneticTypes);
+		}
+		else
+		{
+			strmega.append(strTempMsg);
+		}
+	}
+
+
+	return strmega;
 }

@@ -24,7 +24,7 @@ using std::vector;
 typedef vector<std::string> VecString;
 typedef unsigned char  uint8_t;
 
-#define LENGTH_A 2046
+#define LENGTH_A 1046*2
 #define LENGTH_B 4096
 #define CHAR_TO_UPPER(ch)   ((ch >= 'a' && ch <= 'z')?(ch-0x20):ch)
 

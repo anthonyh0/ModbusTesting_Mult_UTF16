@@ -33,7 +33,8 @@ enum logType
 {
 	sending,
 	receiving,
-	cntStatus
+	cntStatus,
+	polling
 };
 enum eLanguage
 {
@@ -100,6 +101,7 @@ protected:
 	DECLARE_MESSAGE_MAP()
 
 public:
+	bool isPol;
 	int gloIsConnect;
 	int m_Row;
 	int m_Col;
@@ -170,4 +172,5 @@ public:
 	afx_msg void handlePassValue(CString passValue);
 	CString m_editValue_sendText;
 	afx_msg void OnBnClickedButtonClean();
+	afx_msg std::string pollingMsgParsing(uint8_t* polMsg);
 };
